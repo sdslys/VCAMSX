@@ -1,0 +1,51 @@
+name: Build with Correct Gradle
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Force Gradle 8.4 download
+      run: |
+        # 删除所有可能的缓存
+        rm -rf ~/.gradle
+        rm -rf .gradle
+        
+        # 更新 wrapper 配置
+        sed -i 's/gradle-8.0-bin.zip/gradle-8.4-all.zip/g' gradle/wrapper/gradle-wrapper.properties
+        sed -i 's/gradle-8.0-all.zip/gradle-8.4-all.zip/g' gradle/wrapper/gradle-wrapper.properties
+        
+        echo "=== 当前配置 ==="
+        cat gradle/wrapper/gradle-wrapper.properties
+    
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    
+    - name: Download and use Gradle 8.4
+      run: |
+        # 手动下载 Gradle 8.4（如果 wrapper 仍然有问题）
+        wget https://services.gradle.org/distributions/gradle-8.4-all.zip
+        unzip -q gradle-8.4-all.zip
+        ./gradle-8.4/bin/gradle --version
+        
+        # 或者使用 wrapper（优先）
+        chmod +x ./gradlew
+        ./gradlew --version
+    
+    - name: Build project
+      run: |
+        ./gradlew clean
+        ./gradlew assembleDebug --stacktrace
+    
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: VCAMSX-Build
+        path: app/build/outputs/apk/debug/*.apk
