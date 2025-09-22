@@ -48,9 +48,10 @@ android {
     }
 }
 
- 
+
+
 dependencies {
-    // Core libraries
+    // Core
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
     implementation("androidx.activity:activity-compose:1.8.0")
@@ -63,22 +64,22 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui-text-android:1.5.4")
 
-    // Media - 使用官方ExoPlayer替代ijkplayer
+    // Media - 使用官方ExoPlayer
     implementation("androidx.media3:media3-exoplayer:1.2.1")
     implementation("androidx.media3:media3-ui:1.2.1")
 
     // Network
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
-    implementation("com.google.code.gson:gson:2.8.8")
+    implementation("com.google.code.gson:gson:2.10.1") // 升级到最新稳定版
 
-    // PickerView - 使用JitPack版本替代
+    // PickerView
     implementation("com.github.contrarywind:Android-PickerView:v4.1.9")
 
     // Koin
-    implementation("io.insert-koin:koin-core:3.2.2")
-    implementation("io.insert-koin:koin-android:3.2.2")
-    implementation("io.insert-koin:koin-androidx-compose:3.2.2")
+    implementation("io.insert-koin:koin-core:3.4.0") // 升级到最新版
+    implementation("io.insert-koin:koin-android:3.4.0")
+    implementation("io.insert-koin:koin-androidx-compose:3.4.0")
 
     // Xposed
     compileOnly("de.robv.android.xposed:api:82")
@@ -95,4 +96,3 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
- 
