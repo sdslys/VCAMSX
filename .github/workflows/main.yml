@@ -27,7 +27,20 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        # 添加以下环境变量跳过JDK版本检查
+        
+          SKIP_JDK_VERSION_CHECK: true
     
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+    
+    - name: Build with Gradle
+      run: ./gradlew build
+
     - name: Download and use Gradle 8.4
       run: |
         # 手动下载 Gradle 8.4（如果 wrapper 仍然有问题）
