@@ -29,17 +29,17 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "17"
     }
     buildFeatures {
         compose = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.4.3"
+        kotlinCompilerExtensionVersion = "1.5.4"
     }
     packaging {
         resources {
@@ -51,7 +51,7 @@ android {
 dependencies {
 
 // Core library for Kotlin extensions and utilities
-    implementation("androidx.core:core-ktx:1.9.0")
+    implementation("androidx.core:core-ktx:1.12.0")
 // Lifecycle components for using ViewModel and LiveData in a Kotlin-friendly way
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
 
@@ -59,7 +59,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.8.0")
 
 // Bill of Materials (BOM) for all Compose libraries, ensures compatible versions
-    implementation(platform("androidx.compose:compose-bom:2023.03.00"))
+    implementation(platform("androidx.compose:compose-bom:2023.10.01"))
     implementation ("com.contrarywind:Android-PickerView:4.1.9")
 // Compose UI framework
     implementation("androidx.compose.ui:ui")
@@ -74,8 +74,8 @@ dependencies {
     implementation("androidx.compose.material3:material3")
 
 // Media3 ExoPlayer for handling media playback
-    implementation("androidx.media3:media3-exoplayer:1.2.0")
-    implementation("androidx.media3:media3-ui:1.2.0")
+    implementation("androidx.media3:media3-exoplayer:1.2.1")
+    implementation("androidx.media3:media3-ui:1.2.1")
     implementation("androidx.compose.ui:ui-text-android:1.5.4")
 
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
