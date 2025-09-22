@@ -31,8 +31,8 @@ jobs:
     - name: Download and use Gradle 8.4
       run: |
         # 手动下载 Gradle 8.4（如果 wrapper 仍然有问题）
-        wget https://services.gradle.org/distributions/gradle-8.4-bin.zip
-        unzip -q gradle-8.4-bin.zip
+        wget https://services.gradle.org/distributions/gradle-8.4-all.zip
+        unzip -q gradle-8.4-all.zip
         ./gradle-8.4/bin/gradle --version
         
         # 或者使用 wrapper（优先）
