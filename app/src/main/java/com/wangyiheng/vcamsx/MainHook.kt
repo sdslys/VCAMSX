@@ -203,43 +203,345 @@ class MainHook : IXposedHookLoadPackage {
     }
 
     private fun process_callback(param: MethodHookParam) {
-        val preview_cb_class: Class<*> = param.args[0].javaClass
-        XposedHelpers.findAndHookMethod(preview_cb_class, "onPreviewFrame",
-            ByteArray::class.java,
-            Camera::class.java, object : XC_MethodHook() {
-                @Throws(Throwable::class)
-                override fun beforeHookedMethod(paramd: MethodHookParam) {
-                    val localcam = paramd.args[1] as Camera
-                    if (localcam ==  camera_onPreviewFrame) {
-                        while ( data_buffer == null) {
-                        }
-                        System.arraycopy(data_buffer, 0, paramd.args[0], 0, min(data_buffer.size.toDouble(), (paramd.args[0] as ByteArray).size.toDouble()).toInt())
-                    } else {
-                        camera_callback_calss = preview_cb_class
-                        camera_onPreviewFrame = paramd.args[1] as Camera
-                        val mwidth = camera_onPreviewFrame!!.getParameters().getPreviewSize().width
-                        val mhight = camera_onPreviewFrame!!.getParameters().getPreviewSize().height
-                        if ( hw_decode_obj != null) {
-                             hw_decode_obj!!.stopDecode()
-                        }
-                        Toast.makeText(context, """
-                                视频需要分辨率与摄像头完全相同
-                                宽：${mwidth}
-                                高：${mhight}
-                                """.trimIndent(), Toast.LENGTH_SHORT).show()
-                        hw_decode_obj = VideoToFrames()
-                        hw_decode_obj!!.setSaveFrames(OutputImageFormat.NV21)
-
-                        val videoUrl = "content://com.wangyiheng.vcamsx.videoprovider"
-                        val videoPathUri = Uri.parse(videoUrl)
-                        hw_decode_obj!!.decode( videoPathUri )
-                        while ( data_buffer == null) {
-                        }
-                        System.arraycopy(data_buffer, 0, paramd.args[0], 0, min(data_buffer.size.toDouble(), (paramd.args[0] as ByteArray).size.toDouble()).toInt())
+    val preview_cb_class: Class<*> = param.args[0].javaClass
+    XposedHelpers.findAndHookMethod(preview_cb_class, "onPreviewFrame",
+        ByteArray::class.java,
+        Camera::class.java, object : XC_MethodHook() {
+            @Throws(Throwable::class)
+            override fun beforeHookedMethod(paramd: MethodHookParam) {
+                val localcam = paramd.args[1] as Camera
+                if (localcam == camera_onPreviewFrame) {
+                    while (data_buffer == null) {
                     }
+                    
+                    // 添加旋转处理 - 情况1：已经初始化的摄像头
+                    val rotatedData = rotateNV21CounterClockwise90(
+                        data_buffer, 
+                        camera_onPreviewFrame!!.parameters.previewSize.width,
+                        camera_onPreviewFrame!!.parameters.previewSize.height
+                    )
+                    
+                    System.arraycopy(rotatedData, 0, paramd.args[0], 0, 
+                        min(rotatedData.size.toDouble(), (paramd.args[0] as ByteArray).size.toDouble()).toInt())
+                } else {
+                    camera_callback_calss = preview_cb_class
+                    camera_onPreviewFrame = paramd.args[1] as Camera
+                    val mwidth = camera_onPreviewFrame!!.parameters.previewSize.width
+                    val mhight = camera_onPreviewFrame!!.parameters.previewSize.height
+                    if (hw_decode_obj != null) {
+                        hw_decode_obj!!.stopDecode()
+                    }
+                    Toast.makeText(context, """
+                        视频需要分辨率与摄像头完全相同
+                        宽：${mwidth}
+                        高：${mhight}
+                        """.trimIndent(), Toast.LENGTH_SHORT).show()
+                    hw_decode_obj = VideoToFrames()
+                    hw_decode_obj!!.setSaveFrames(OutputImageFormat.NV21)
+
+                    val videoUrl = "content://com.wangyiheng.vcamsx.videoprovider"
+                    val videoPathUri = Uri.parse(videoUrl)
+                    hw_decode_obj!!.decode(videoPathUri)
+                    while (data_buffer == null) {
+                    }
+                    
+                    // 添加旋转处理 - 情况2：新摄像头初始化
+                    val rotatedData = rotateNV21CounterClockwise90(
+                        data_buffer, 
+                        mwidth,
+                        mhight
+                    )
+                    
+                    System.arraycopy(rotatedData, 0, paramd.args[0], 0, 
+                        min(rotatedData.size.toDouble(), (paramd.args[0] as ByteArray).size.toDouble()).toInt())
                 }
-            })
+            }
+        })
+}
+
+// 添加旋转函数（放在同一个类中）
+private fun rotateNV21CounterClockwise90(data: ByteArray, width: Int, height: Int): ByteArray {
+    val rotated = ByteArray(data.size)
+    val frameSize = width * height
+    
+    // 旋转Y平面（亮度分量）
+    for (y in 0 until height) {
+        for (x in 0 until width) {
+            // 逆时针旋转90度坐标变换
+            val newX = y
+            val newY = width - 1 - x
+            rotated[newY * height + newX] = data[y * width + x]
+        }
     }
+    
+    // 旋转UV平面（色度分量）- NV21格式中UV交错存储
+    for (y in 0 until height / 2) {
+        for (x in 0 until width / 2) {
+            val uvIndex = frameSize + (y * width + x * 2)
+            val newX = y
+            val newY = width / 2 - 1 - x
+            val newUVIndex = frameSize + (newY * height / 2 + newX) * 2
+            
+            // 复制U分量和V分量
+            rotated[newUVIndex] = data[uvIndex]         // U
+            rotated[newUVIndex + 1] = data[uvIndex + 1] // V
+        }
+    }
+    
+    return rotated
+}
+
+// 或者使用更高效的逐行扫描版本（可选）
+private fun rotateNV21CounterClockwise90Optimized(data: ByteArray, width: Int, height: Int): ByteArray {
+    val rotated = ByteArray(data.size)
+    val frameSize = width * height
+    
+    // 旋转Y分量
+    var index = 0
+    for (x in width - 1 downTo 0) {
+        for (y in 0 until height) {
+            rotated[index++] = data[y * width + x]
+        }
+    }
+    
+    // 旋转UV分量
+    val uvStart = frameSize
+    for (x in width / 2 - 1 downTo 0) {
+        for (y in 0 until height / 2) {
+            val srcIndex = uvStart + y * width + x * 2
+            rotated[index++] = data[srcIndex]     // U
+            rotated[index++] = data[srcIndex + 1] // V
+        }
+    }
+    
+    return rotated
+  private fun process_callback(param: MethodHookParam) {
+    val preview_cb_class: Class<*> = param.args[0].javaClass
+    XposedHelpers.findAndHookMethod(preview_cb_class, "onPreviewFrame",
+        ByteArray::class.java,
+        Camera::class.java, object : XC_MethodHook() {
+            @Throws(Throwable::class)
+            override fun beforeHookedMethod(paramd: MethodHookParam) {
+                val localcam = paramd.args[1] as Camera
+                if (localcam == camera_onPreviewFrame) {
+                    while (data_buffer == null) {
+                    }
+                    
+                    // 添加旋转处理 - 情况1：已经初始化的摄像头
+                    val rotatedData = rotateNV21CounterClockwise90(
+                        data_buffer, 
+                        camera_onPreviewFrame!!.parameters.previewSize.width,
+                        camera_onPreviewFrame!!.parameters.previewSize.height
+                    )
+                    
+                    System.arraycopy(rotatedData, 0, paramd.args[0], 0, 
+                        min(rotatedData.size.toDouble(), (paramd.args[0] as ByteArray).size.toDouble()).toInt())
+                } else {
+                    camera_callback_calss = preview_cb_class
+                    camera_onPreviewFrame = paramd.args[1] as Camera
+                    val mwidth = camera_onPreviewFrame!!.parameters.previewSize.width
+                    val mhight = camera_onPreviewFrame!!.parameters.previewSize.height
+                    if (hw_decode_obj != null) {
+                        hw_decode_obj!!.stopDecode()
+                    }
+                    Toast.makeText(context, """
+                        视频需要分辨率与摄像头完全相同
+                        宽：${mwidth}
+                        高：${mhight}
+                        """.trimIndent(), Toast.LENGTH_SHORT).show()
+                    hw_decode_obj = VideoToFrames()
+                    hw_decode_obj!!.setSaveFrames(OutputImageFormat.NV21)
+
+                    val videoUrl = "content://com.wangyiheng.vcamsx.videoprovider"
+                    val videoPathUri = Uri.parse(videoUrl)
+                    hw_decode_obj!!.decode(videoPathUri)
+                    while (data_buffer == null) {
+                    }
+                    
+                    // 添加旋转处理 - 情况2：新摄像头初始化
+                    val rotatedData = rotateNV21CounterClockwise90(
+                        data_buffer, 
+                        mwidth,
+                        mhight
+                    )
+                    
+                    System.arraycopy(rotatedData, 0, paramd.args[0], 0, 
+                        min(rotatedData.size.toDouble(), (paramd.args[0] as ByteArray).size.toDouble()).toInt())
+                }
+            }
+        })
+}
+
+// 添加旋转函数（放在同一个类中）
+private fun rotateNV21CounterClockwise90(data: ByteArray, width: Int, height: Int): ByteArray {
+    val rotated = ByteArray(data.size)
+    val frameSize = width * height
+    
+    // 旋转Y平面（亮度分量）
+    for (y in 0 until height) {
+        for (x in 0 until width) {
+            // 逆时针旋转90度坐标变换
+            val newX = y
+            val newY = width - 1 - x
+            rotated[newY * height + newX] = data[y * width + x]
+        }
+    }
+    
+    // 旋转UV平面（色度分量）- NV21格式中UV交错存储
+    for (y in 0 until height / 2) {
+        for (x in 0 until width / 2) {
+            val uvIndex = frameSize + (y * width + x * 2)
+            val newX = y
+            val newY = width / 2 - 1 - x
+            val newUVIndex = frameSize + (newY * height / 2 + newX) * 2
+            
+            // 复制U分量和V分量
+            rotated[newUVIndex] = data[uvIndex]         // U
+            rotated[newUVIndex + 1] = data[uvIndex + 1] // V
+        }
+    }
+    
+    return rotated
+}
+
+// 或者使用更高效的逐行扫描版本（可选）
+private fun rotateNV21CounterClockwise90Optimized(data: ByteArray, width: Int, height: Int): ByteArray {
+    val rotated = ByteArray(data.size)
+    val frameSize = width * height
+    
+    // 旋转Y分量
+    var index = 0
+    for (x in width - 1 downTo 0) {
+        for (y in 0 until height) {
+            rotated[index++] = data[y * width + x]
+        }
+    }
+    
+    // 旋转UV分量
+    val uvStart = frameSize
+    for (x in width / 2 - 1 downTo 0) {
+        for (y in 0 until height / 2) {
+            val srcIndex = uvStart + y * width + x * 2
+            rotated[index++] = data[srcIndex]     // U
+            rotated[index++] = data[srcIndex + 1] // V
+        }
+    }
+    
+    return rotated
+}      private fun process_callback(param: MethodHookParam) {
+    val preview_cb_class: Class<*> = param.args[0].javaClass
+    XposedHelpers.findAndHookMethod(preview_cb_class, "onPreviewFrame",
+        ByteArray::class.java,
+        Camera::class.java, object : XC_MethodHook() {
+            @Throws(Throwable::class)
+            override fun beforeHookedMethod(paramd: MethodHookParam) {
+                val localcam = paramd.args[1] as Camera
+                if (localcam == camera_onPreviewFrame) {
+                    while (data_buffer == null) {
+                    }
+                    
+                    // 添加旋转处理 - 情况1：已经初始化的摄像头
+                    val rotatedData = rotateNV21CounterClockwise90(
+                        data_buffer, 
+                        camera_onPreviewFrame!!.parameters.previewSize.width,
+                        camera_onPreviewFrame!!.parameters.previewSize.height
+                    )
+                    
+                    System.arraycopy(rotatedData, 0, paramd.args[0], 0, 
+                        min(rotatedData.size.toDouble(), (paramd.args[0] as ByteArray).size.toDouble()).toInt())
+                } else {
+                    camera_callback_calss = preview_cb_class
+                    camera_onPreviewFrame = paramd.args[1] as Camera
+                    val mwidth = camera_onPreviewFrame!!.parameters.previewSize.width
+                    val mhight = camera_onPreviewFrame!!.parameters.previewSize.height
+                    if (hw_decode_obj != null) {
+                        hw_decode_obj!!.stopDecode()
+                    }
+                    Toast.makeText(context, """
+                        视频需要分辨率与摄像头完全相同
+                        宽：${mwidth}
+                        高：${mhight}
+                        """.trimIndent(), Toast.LENGTH_SHORT).show()
+                    hw_decode_obj = VideoToFrames()
+                    hw_decode_obj!!.setSaveFrames(OutputImageFormat.NV21)
+
+                    val videoUrl = "content://com.wangyiheng.vcamsx.videoprovider"
+                    val videoPathUri = Uri.parse(videoUrl)
+                    hw_decode_obj!!.decode(videoPathUri)
+                    while (data_buffer == null) {
+                    }
+                    
+                    // 添加旋转处理 - 情况2：新摄像头初始化
+                    val rotatedData = rotateNV21CounterClockwise90(
+                        data_buffer, 
+                        mwidth,
+                        mhight
+                    )
+                    
+                    System.arraycopy(rotatedData, 0, paramd.args[0], 0, 
+                        min(rotatedData.size.toDouble(), (paramd.args[0] as ByteArray).size.toDouble()).toInt())
+                }
+            }
+        })
+}
+
+// 添加旋转函数（放在同一个类中）
+private fun rotateNV21CounterClockwise90(data: ByteArray, width: Int, height: Int): ByteArray {
+    val rotated = ByteArray(data.size)
+    val frameSize = width * height
+    
+    // 旋转Y平面（亮度分量）
+    for (y in 0 until height) {
+        for (x in 0 until width) {
+            // 逆时针旋转90度坐标变换
+            val newX = y
+            val newY = width - 1 - x
+            rotated[newY * height + newX] = data[y * width + x]
+        }
+    }
+    
+    // 旋转UV平面（色度分量）- NV21格式中UV交错存储
+    for (y in 0 until height / 2) {
+        for (x in 0 until width / 2) {
+            val uvIndex = frameSize + (y * width + x * 2)
+            val newX = y
+            val newY = width / 2 - 1 - x
+            val newUVIndex = frameSize + (newY * height / 2 + newX) * 2
+            
+            // 复制U分量和V分量
+            rotated[newUVIndex] = data[uvIndex]         // U
+            rotated[newUVIndex + 1] = data[uvIndex + 1] // V
+        }
+    }
+    
+    return rotated
+}
+
+// 或者使用更高效的逐行扫描版本（可选）
+private fun rotateNV21CounterClockwise90Optimized(data: ByteArray, width: Int, height: Int): ByteArray {
+    val rotated = ByteArray(data.size)
+    val frameSize = width * height
+    
+    // 旋转Y分量
+    var index = 0
+    for (x in width - 1 downTo 0) {
+        for (y in 0 until height) {
+            rotated[index++] = data[y * width + x]
+        }
+    }
+    
+    // 旋转UV分量
+    val uvStart = frameSize
+    for (x in width / 2 - 1 downTo 0) {
+        for (y in 0 until height / 2) {
+            val srcIndex = uvStart + y * width + x * 2
+            rotated[index++] = data[srcIndex]     // U
+            rotated[index++] = data[srcIndex + 1] // V
+        }
+    }
+    
+    return rotated
+    } 
 
 
     private fun process_camera2_init(c2StateCallbackClass: Class<Any>?, lpparam: XC_LoadPackage.LoadPackageParam) {
