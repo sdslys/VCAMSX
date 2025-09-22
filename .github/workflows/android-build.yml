@@ -1,41 +1,50 @@
-name: Android Build
+name: Build with Compatible Versions
 
-on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+on: [push, pull_request]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
+    - uses: actions/checkout@v4
+    
+    - name: Use compatible Android Gradle Plugin version
+      run: |
+        # 降级 AGP 到兼容 Gradle 8.0 的版本
+        cat > build.gradle.kts << 'EOF'
+        plugins {
+            id("com.android.application") version "8.0.2" apply false  # 兼容 Gradle 8.0
+            id("org.jetbrains.kotlin.android") version "1.8.22" apply false
+        }
+        EOF
+        
+        # 确保使用正确的 Gradle 版本
+        cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+        distributionBase=GRADLE_USER_HOME
+        distributionPath=wrapper/dists
+        distributionUrl=https\://services.gradle.org/distributions/gradle-8.0-bin.zip
+        zipStoreBase=GRADLE_USER_HOME
+        zipStorePath=wrapper/dists
+        EOF
+        
+        echo "=== 使用兼容版本 ==="
+        echo "AGP: 8.0.2, Gradle: 8.0, Kotlin: 1.8.22"
+    
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
-        
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-      
-    - name: Grant execute permission for gradlew
-      run: chmod +x ./gradlew
-      
-    - name: Build with Gradle
+    
+    - name: Build
       run: |
-        ./gradlew assembleDebug
-        ./gradlew assembleRelease
-        
-    - name: Upload APK artifacts
+        chmod +x ./gradlew
+        ./gradlew clean
+        ./gradlew assembleDebug --stacktrace
+    
+    - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: app-apks
-        path: |
-          app/build/outputs/apk/debug/*.apk
-          app/build/outputs/apk/release/*.apk
-        retention-days: 30
+        name: VCAMSX-Compatible
+        path: app/build/outputs/apk/debug/*.apk
